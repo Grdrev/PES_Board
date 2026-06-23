@@ -11,10 +11,19 @@ bool do_execute_main_task = false; // this variable will be toggled via the user
 bool do_reset_all_once = false;    // this variable is used to reset certain variables and objects and
                                    // shows how you can run a code segment only once
 
+// function declaration, definition at the end
+float ir_sensor_compensation(float ir_distance_mV);
+
 // objects for user button (blue button) handling on nucleo board
 DebounceIn user_button(BUTTON1);   // create DebounceIn to evaluate the user button
 void toggle_do_execute_main_fcn(); // custom function which is getting executed when user
                                    // button gets pressed, definition at the end
+
+// ir distance sensor
+float ir_distance_mV = 0.0f; // define a variable to store measurement (in mV)
+float ir_distance_cm = 0.0f;  // define a variable to store measurement (in cm)
+AnalogIn ir_analog_in(PC_2); // create AnalogIn object to read in the infrared distance sensor
+                             // 0...3.3V are mapped to 0...1    
 
 // main runs as an own thread
 int main()
@@ -52,6 +61,16 @@ int main()
 
             // --- code that runs when the blue button was pressed goes here ---
 
+            // read analog input
+            ir_distance_mV = 1.0e3f * ir_analog_in.read() * 3.3f;
+            ir_distance_cm = ir_sensor_compensation(ir_distance_mV);
+
+            // print to the serial terminal
+            // printf("IR distance mV: %f \n", ir_distance_mV);
+            // print to the serial terminal
+            printf("IR distance mV: %f IR distance cm: %f \n", ir_distance_mV, ir_distance_cm);
+
+
             // visual feedback that the main task is executed, setting this once would actually be enough
             led1 = 1;
         } else {
@@ -60,6 +79,9 @@ int main()
                 do_reset_all_once = false;
 
                 // --- variables and objects that should be reset go here ---
+                // reset variables and objects
+                ir_distance_mV = 0.0f; 
+                ir_distance_cm = 0.0f;  
 
                 // reset variables and objects
                 led1 = 0;
@@ -87,4 +109,17 @@ void toggle_do_execute_main_fcn()
     // set do_reset_all_once to true if do_execute_main_task changed from false to true
     if (do_execute_main_task)
         do_reset_all_once = true;
+}
+
+float ir_sensor_compensation(float ir_distance_mV)
+{
+    // insert values that you got from the MATLAB file
+    static const float a = 11670.4256;
+    static const float b =  -53.154;
+
+    // avoid division by zero by adding a small value to the denominator
+    if (ir_distance_mV + b == 0.0f)
+        ir_distance_mV -= 0.001f;
+
+    return a / (ir_distance_mV + b);
 }
