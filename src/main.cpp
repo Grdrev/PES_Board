@@ -1,4 +1,5 @@
 #include "mbed.h"
+#include "IRSensor.h"
 
 // pes board pin map
 #include "PESBoardPinMap.h"
@@ -22,12 +23,23 @@ void toggle_do_execute_main_fcn(); // custom function which is getting executed 
 // ir distance sensor
 float ir_distance_mV = 0.0f; // define a variable to store measurement (in mV)
 float ir_distance_cm = 0.0f;  // define a variable to store measurement (in cm)
-AnalogIn ir_analog_in(PC_2); // create AnalogIn object to read in the infrared distance sensor
+float ir_distance_avg = 0.0f; // define a avg variable to store measurement (in cm)
+//AnalogIn ir_analog_in(PC_2); // create AnalogIn object to read in the infrared distance sensor
                              // 0...3.3V are mapped to 0...1    
+
+
+
 
 // main runs as an own thread
 int main()
 {
+    // create IRSensor object to read in the infrared distance sensor this must be in the main.
+    //IRSensor ir_sensor_f(PC_2, 11670.4256f, -53.154f);
+    IRSensor ir_sensor_f(PC_2);
+    ir_sensor_f.setCalibration(11670.4256f, -53.154f);
+
+
+    //printf("live waiting... \n");
     // attach button fall function address to user button object
     user_button.fall(&toggle_do_execute_main_fcn);
 
@@ -50,7 +62,7 @@ int main()
 
     // start timer
     main_task_timer.start();
-
+    
     // this loop will run forever
     while (true) {
         main_task_timer.reset();
@@ -62,13 +74,18 @@ int main()
             // --- code that runs when the blue button was pressed goes here ---
 
             // read analog input
-            ir_distance_mV = 1.0e3f * ir_analog_in.read() * 3.3f;
-            ir_distance_cm = ir_sensor_compensation(ir_distance_mV);
+            // ir_distance_mV = 1.0e3f * ir_analog_in.read() * 3.3f;
+            // ir_distance_cm = ir_sensor_compensation(ir_distance_mV);
+           ir_distance_mV = ir_sensor_f.readmV(); // sensor value in millivolts
+            ir_distance_cm = ir_sensor_f.readcm(); // sensor value in centimeters (if calibrated)
+            ir_distance_avg = ir_sensor_f.read();
+
 
             // print to the serial terminal
             // printf("IR distance mV: %f \n", ir_distance_mV);
             // print to the serial terminal
-            printf("IR distance mV: %f IR distance cm: %f \n", ir_distance_mV, ir_distance_cm);
+            printf("IR distance mV: %5.4f IR distance cm: %5.4f IR distance avg: %5.4f \n", ir_distance_mV, ir_distance_cm, ir_distance_avg);
+
 
 
             // visual feedback that the main task is executed, setting this once would actually be enough
@@ -81,7 +98,9 @@ int main()
                 // --- variables and objects that should be reset go here ---
                 // reset variables and objects
                 ir_distance_mV = 0.0f; 
-                ir_distance_cm = 0.0f;  
+                ir_distance_cm = 0.0f;
+                ir_distance_avg = 0.0f;   
+                //printf("waiting... \n");
 
                 // reset variables and objects
                 led1 = 0;
