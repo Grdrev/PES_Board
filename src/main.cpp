@@ -219,8 +219,8 @@ switch (robot_state) {
         if ((us_distance_cm < us_distance_min) || (us_distance_cm > us_distance_max))
             robot_state = RobotState::SLEEP;
 
-        // if the mechanical button is pressed go to EMERGENCY
-        if (mechanical_button.read())
+        // if the mechanical button is pressed go to EMERGENCY -> press pulls the pin to low.
+        if (!mechanical_button.read())
             robot_state = RobotState::EMERGENCY;
 
         break;
