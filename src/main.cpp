@@ -1,3 +1,17 @@
+/*
+COMPILE MODE:
+
+Tag : True for activated
+
+Calibration
+
+*/
+
+
+#define SERVO_CALIBRATION 0  // 1 = ON, 0 = OFF
+#define STATE_MACHINE 1        // 1 = ON, 0 = OFF
+
+
 #include "mbed.h"
 
 // pes board pin map
@@ -15,6 +29,20 @@ bool do_reset_all_once = false;    // this variable is used to reset certain var
 DebounceIn user_button(BUTTON1);   // create DebounceIn to evaluate the user button
 void toggle_do_execute_main_fcn(); // custom function which is getting executed when user
                                    // button gets pressed, definition at the end
+
+/*
+PART 1: Servo motor control
+
+*/
+#include "Servo.h"
+
+/*
+Note Ultrasonic sensor HC-SR04:(%V)
+
+*/
+#include "UltrasonicSensor.h"
+
+
 
 // main runs as an own thread
 int main()
@@ -39,6 +67,45 @@ int main()
 
     // --- adding variables and objects and applying functions starts here ---
 
+    /*
+PART 1: Servo motor control
+the angle within a normalized range of 0.0f to 1.0f. 
+
+PB_D0
+PB_D1
+PB_D2
+PB_D3
+
+
+*/
+
+// servo
+Servo servo_D0(PB_D2);
+Servo servo_D1(PB_D3);
+
+
+/*
+Note Ultrasonic sensor HC-SR04:(%V)
+The HC-SR04 ultrasonic sensor has 4 pins:
+PB_D0
+PB_D1
+PB_D2
+PB_D3
+
+*/
+
+// ultrasonic sensor
+//UltrasonicSensor us_sensor(PB_D1);
+//float us_distance_cm = 0.0f;
+
+
+    float servo_input = 0.0f;
+    int servo_counter = 0; // define servo counter, this is an additional variable
+                       // used to command the servo
+#if SERVO_CALIBRATION
+    const int loops_per_seconds = static_cast<int>(ceilf(1.0f / (0.001f * static_cast<float>(main_task_period_ms))));
+#endif
+
     // start timer
     main_task_timer.start();
 
@@ -52,6 +119,44 @@ int main()
 
             // --- code that runs when the blue button was pressed goes here ---
 
+            //Servo motor control
+            // print to the serial terminal
+            printf("Pulse width: %f \n", servo_input);
+
+            // Servo activation
+            // enable the servos
+            if (!servo_D0.isEnabled())
+                servo_D0.enable();
+            if (!servo_D1.isEnabled())
+                servo_D1.enable();
+
+            // command the servos
+            servo_D0.setPulseWidth(servo_input);
+            servo_D1.setPulseWidth(servo_input);
+
+#if SERVO_CALIBRATION
+            // calibrate the servos
+            // calculate inputs for the servos for the next cycle
+            if ((servo_input < 1.0f) &&                     // constrain servo_input to be < 1.0f
+                (servo_counter % loops_per_seconds == 0) && // true if servo_counter is a multiple of loops_per_second
+                (servo_counter != 0))                       // avoid servo_counter = 0
+                servo_input += 0.005f;
+            servo_counter++;
+#endif
+
+
+
+
+            // read us sensor distance, non valid measurements will return -1.0f
+            //us_distance_cm = us_sensor.read();
+            
+            // read us sensor distance, only valid measurements will update us_distance_cm
+            //const float us_distance_cm_candidate = us_sensor.read();
+            //if (us_distance_cm_candidate > 0.0f)
+              //  us_distance_cm = us_distance_cm_candidate;
+
+            //printf("Distance: %.2f cm\n", us_distance_cm);
+
             // visual feedback that the main task is executed, setting this once would actually be enough
             led1 = 1;
         } else {
@@ -60,6 +165,11 @@ int main()
                 do_reset_all_once = false;
 
                 // --- variables and objects that should be reset go here ---
+                // reset variables and objects
+
+                servo_D0.disable();
+                servo_D1.disable();
+                servo_input = 0.0f;
 
                 // reset variables and objects
                 led1 = 0;
