@@ -1,31 +1,45 @@
-#define PART1_DC_MOTOR 1
-#define P1_M1 1 //open loop control
-#define P1_M2 1 //Motor M2 Closed-Loop Velocity Control
-#define P1_M3 1 //Motor M3 Closed-Loop Position Control
-
 #include "mbed.h"
+#include "IRSensor.h"
 
 // pes board pin map
 #include "PESBoardPinMap.h"
 
 // drivers
 #include "DebounceIn.h"
-#include "FastPWM.h"
-#include "DCMotor.h"
 
 bool do_execute_main_task = false; // this variable will be toggled via the user button (blue button) and
                                    // decides whether to execute the main task or not
 bool do_reset_all_once = false;    // this variable is used to reset certain variables and objects and
                                    // shows how you can run a code segment only once
 
+// function declaration, definition at the end
+float ir_sensor_compensation(float ir_distance_mV);
+
 // objects for user button (blue button) handling on nucleo board
 DebounceIn user_button(BUTTON1);   // create DebounceIn to evaluate the user button
 void toggle_do_execute_main_fcn(); // custom function which is getting executed when user
                                    // button gets pressed, definition at the end
 
+// ir distance sensor
+float ir_distance_mV = 0.0f; // define a variable to store measurement (in mV)
+float ir_distance_cm = 0.0f;  // define a variable to store measurement (in cm)
+float ir_distance_avg = 0.0f; // define a avg variable to store measurement (in cm)
+//AnalogIn ir_analog_in(PC_2); // create AnalogIn object to read in the infrared distance sensor
+                             // 0...3.3V are mapped to 0...1    
+
+
+
+
 // main runs as an own thread
 int main()
 {
+    // create IRSensor object to read in the infrared distance sensor this must be in the main.
+    //IRSensor ir_sensor_f(PC_2, 11670.4256f, -53.154f);
+    IRSensor ir_sensor_f(PC_2);
+    ir_sensor_f.setCalibration(11670.4256f, -53.154f);
+
+
+    //printf("live waiting... \n");
     // attach button fall function address to user button object
     user_button.fall(&toggle_do_execute_main_fcn);
 
@@ -46,79 +60,9 @@ int main()
 
     // --- adding variables and objects and applying functions starts here ---
 
-    // PES-Board Pin Names
-    /*
-PB_PWM_M1
-PB_PWM_M2
-PB_PWM_M3
-
-PB_ENC_A_M1
-PB_ENC_B_M1
-PB_ENC_A_M2
-PB_ENC_B_M2
-PB_ENC_A_M3
-PB_ENC_B_M3
-
-PB_ENABLE_DCMOTORS
-*/
-
-// create object to enable power electronics for the DC motors
-DigitalOut enable_motors(PB_ENABLE_DCMOTORS);
-
-#if P1_M1
-// motor M1
-FastPWM pwm_M1(PB_PWM_M1); // create FastPWM object to command motor M1
-/*
-PWM input 0.0f → -12V is applied to the motor
-PWM input 0.5f →  0V 
-PWM input 1.0f →  12V
-*/
-
-#endif
-
-
-
-#if P1_M2
-
-const float voltage_max = 12.0f; // maximum voltage of battery packs, adjust this to
-                                 // 6.0f V if you only use one battery pack
-
-
-// motor M2
-const float gear_ratio_M2 = 78.125f; // gear ratio
-const float kn_M2 = 180.0f / 12.0f;  // motor constant [rpm/V]
-// it is assumed that only one motor is available, therefore
-// we use the pins from M2, so you can leave it connected to M2
-DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio_M2, kn_M2, voltage_max);
-
-// limit max. velocity to half physical possible velocity
-motor_M2.setMaxVelocity(motor_M2.getMaxPhysicalVelocity() * 0.5f);
-
-
-// enable the motion planner for smooth movements
-motor_M2.enableMotionPlanner();
-
-#endif
-
-#if P1_M3
-// motor M3
-// motor M3
-const float gear_ratio_M3 = 78.125f; // gear ratio
-const float kn_M3 = 180.0f / 12.0f;  // motor constant [rpm/V]
-// it is assumed that only one motor is available, therefore
-// we use the pins from M2, so you can leave it connected to M2
-DCMotor motor_M3(PB_PWM_M3, PB_ENC_A_M3, PB_ENC_B_M3, gear_ratio_M3, kn_M3, voltage_max);
-// enable the motion planner for smooth movement
-motor_M3.enableMotionPlanner();
-// limit max. velocity to half physical possible velocity
-motor_M3.setMaxVelocity(motor_M3.getMaxPhysicalVelocity() * 0.5f);
-
-#endif
-
-
     // start timer
     main_task_timer.start();
-
+    
     // this loop will run forever
     while (true) {
         main_task_timer.reset();
@@ -128,34 +72,21 @@ motor_M3.setMaxVelocity(motor_M3.getMaxPhysicalVelocity() * 0.5f);
         if (do_execute_main_task) {
 
             // --- code that runs when the blue button was pressed goes here ---
-            // enable hardwaredriver DC motors: 0 -> disabled, 1 -> enabled
-            enable_motors = 1;
 
-            #if P1_M1
-            pwm_M1.write(0.75f); // apply 6V to the motor M1
-            #endif
+            // read analog input
+            // ir_distance_mV = 1.0e3f * ir_analog_in.read() * 3.3f;
+            // ir_distance_cm = ir_sensor_compensation(ir_distance_mV);
+           ir_distance_mV = ir_sensor_f.readmV(); // sensor value in millivolts
+            ir_distance_cm = ir_sensor_f.readcm(); // sensor value in centimeters (if calibrated)
+            ir_distance_avg = ir_sensor_f.read();
 
-#if P1_M2
-       
+
             // print to the serial terminal
-//printf("Motor velocity: %f \n", motor_M2.getVelocity());
+            // printf("IR distance mV: %f \n", ir_distance_mV);
+            // print to the serial terminal
+            printf("IR distance mV: %5.4f IR distance cm: %5.4f IR distance avg: %5.4f \n", ir_distance_mV, ir_distance_cm, ir_distance_avg);
 
-// limit max. velocity to half physical possible velocity
-//motor_M2.setMaxVelocity(motor_M2.getMaxPhysicalVelocity() * 0.5f);
 
-//motor_M2.setVelocity(motor_M2.getMaxVelocity() * 0.5f);
-motor_M2.setRotation(3.0f); // set target rotation to 360 degrees
-
-#endif
-
-#if P1_M3
-// rotate the motor 3 times
-motor_M3.setRotation(3.0f);
-
-// print to the serial terminal
-printf("Motor position: %f \n", motor_M3.getRotation());
-
-#endif
 
             // visual feedback that the main task is executed, setting this once would actually be enough
             led1 = 1;
@@ -165,21 +96,11 @@ printf("Motor position: %f \n", motor_M3.getRotation());
                 do_reset_all_once = false;
 
                 // --- variables and objects that should be reset go here ---
-                enable_motors = 0; // disable hardwaredriver DC motors
-
-                
-
-                #if P1_M1
-                pwm_M1.write(0.5f); // apply 0V to the motor M1
-                #endif
-
-                #if P1_M2
-                motor_M2.setRotation(0.0f); // set target rotation to 0 degrees
-                #endif
-
-                #if P1_M3
-                motor_M3.setRotation(0.0f); // set target rotation to 0 degrees
-                #endif
+                // reset variables and objects
+                ir_distance_mV = 0.0f; 
+                ir_distance_cm = 0.0f;
+                ir_distance_avg = 0.0f;   
+                //printf("waiting... \n");
 
                 // reset variables and objects
                 led1 = 0;
@@ -190,20 +111,6 @@ printf("Motor position: %f \n", motor_M3.getRotation());
         user_led = !user_led;
 
         // --- code that runs every cycle at the end goes here ---
-
-        #if P1_M2
-       
-            // print to the serial terminal
-printf("Motor velocity: %f \n", motor_M2.getVelocity());
-
-#endif
-
-#if P1_M3
-
-// print to the serial terminal
-printf("Motor position: %f \n", motor_M3.getRotation());
-
-#endif
 
         // read timer and make the main thread sleep for the remaining time span (non blocking)
         int main_task_elapsed_time_ms = duration_cast<milliseconds>(main_task_timer.elapsed_time()).count();
@@ -221,4 +128,17 @@ void toggle_do_execute_main_fcn()
     // set do_reset_all_once to true if do_execute_main_task changed from false to true
     if (do_execute_main_task)
         do_reset_all_once = true;
+}
+
+float ir_sensor_compensation(float ir_distance_mV)
+{
+    // insert values that you got from the MATLAB file
+    static const float a = 11670.4256;
+    static const float b =  -53.154;
+
+    // avoid division by zero by adding a small value to the denominator
+    if (ir_distance_mV + b == 0.0f)
+        ir_distance_mV -= 0.001f;
+
+    return a / (ir_distance_mV + b);
 }
