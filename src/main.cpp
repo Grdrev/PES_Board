@@ -1,4 +1,5 @@
-#define P1_KINEMATICS 1
+#define P1_KINEMATICS 0
+#define P2_LINE_ARRAY 1
 
 #include "mbed.h"
 
@@ -10,6 +11,8 @@
 
 #include "DCMotor.h"
 #include <Eigen/Dense>
+#include "SensorBar.h"
+#include "LineFollower.h"
 
 #define M_PIf 3.14159265358979323846f // pi
 
@@ -42,11 +45,14 @@ int main()
     // additional led
     // create DigitalOut object to command extra led, you need to add an additional resistor, e.g. 220...500 Ohm
     // a led has an anode (+) and a cathode (-), the cathode needs to be connected to ground via the resistor
+   
+    #if !P2_LINE_ARRAY
     DigitalOut led1(PB_9);
+    #endif
 
     // --- adding variables and objects and applying functions starts here ---
 
-#if P1_KINEMATICS
+
 
 // create object to enable power electronics for the dc motors
 DigitalOut enable_motors(PB_ENABLE_DCMOTORS);
@@ -59,9 +65,11 @@ const float kn = 140.0f / 12.0f;
 DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max);
 DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max);
 
+//#if P1_KINEMATICS
 // differential drive robot kinematics
 const float r_wheel = 0.0563f / 2.0f; // wheel radius in meters
-const float b_wheel = 0.13f;          // wheelbase, distance from wheel to wheel in meters
+const float b_wheel = 0.156f;  // wheelbase, distance from wheel to wheel in meters
+
 // transforms wheel to robot velocities
 Eigen::Matrix2f Cwheel2robot;
 Cwheel2robot <<  r_wheel / 2.0f   ,  r_wheel / 2.0f   ,
@@ -69,7 +77,30 @@ Cwheel2robot <<  r_wheel / 2.0f   ,  r_wheel / 2.0f   ,
 Eigen::Vector2f robot_coord = {0.0f, 0.0f};  // contains v and w (robot translational and rotational velocity)
 Eigen::Vector2f wheel_speed = {0.0f, 0.0f};  // contains w1 and w2 (wheel speed)
 
-#endif 
+//#endif 
+
+#if P2_LINE_ARRAY
+// sensor bar
+const float bar_dist = 0.114f; // distance from wheel axis to leds on sensor bar / array in meters
+SensorBar sensor_bar(PB_9, PB_8, bar_dist);
+
+// angle measured from sensor bar (black line) relative to robot
+float angle{0.0f};
+
+   // rotational velocity controller
+const float Kp{5.0f};
+const float wheel_vel_max = 2.0f * M_PIf * motor_M2.getMaxPhysicalVelocity();
+
+
+
+const float d_wheel = 0.0372f; // wheel diameter in meters
+
+
+// line follower, tune max. vel rps to your needs
+//LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, b_wheel, motor_M2.getMaxPhysicalVelocity());
+
+
+#endif
 
 
     // start timer
@@ -100,24 +131,61 @@ wheel_speed = Cwheel2robot.inverse() * robot_coord;
 motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PIf)); // set a desired speed for speed controlled dc motors M1
 motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PIf)); // set a desired speed for speed controlled dc motors M2
 
+
 #endif 
 
+#if P2_LINE_ARRAY
 
+// only update sensor bar angle if an led is triggered
+if (sensor_bar.isAnyLedActive())
+    angle = sensor_bar.getAvgAngleRad();
+
+
+// control algorithm for robot velocities
+Eigen::Vector2f robot_coord = {0.5f * wheel_vel_max * r_wheel,  // half of the max. forward velocity
+                               Kp * angle                    }; // simple proportional angle controller
+
+                               // map robot velocities to wheel velocities in rad/sec
+Eigen::Vector2f wheel_speed = Cwheel2robot.inverse() * robot_coord;
+ 
+// setpoints for the dc motors in rps
+motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PIf)); // set a desired speed for speed controlled dc motors M1
+motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PIf)); // set a desired speed for speed controlled dc motors M2
+
+enable_motors = 1;
+
+// setpoints for the dc motors in rps
+//motor_M1.setVelocity(lineFollower.getRightWheelVelocity()); // set a desired speed for speed controlled dc motors M1
+//motor_M2.setVelocity(lineFollower.getLeftWheelVelocity());  // set a desired speed for speed controlled dc motors M2
+#endif
+
+#if !P2_LINE_ARRAY
             // visual feedback that the main task is executed, setting this once would actually be enough
             led1 = 1;
+            #endif
+
         } else {
             // the following code block gets executed only once
             if (do_reset_all_once) {
                 do_reset_all_once = false;
-
                 // --- variables and objects that should be reset go here ---
-enable_motors = 0;
+
+                #if P1_KINEMATICS || P2_LINE_ARRAY
+                enable_motors = 0;
 // setpoints for the dc motors in rps
 motor_M1.setVelocity(0.0f ); // set a desired speed for speed controlled dc motors M1
 motor_M2.setVelocity(0.0f); // set a desired speed for speed controlled dc motors M2
 
+#endif
+#if P2_LINE_ARRAY
+
+
+#endif
                 // reset variables and objects
+                #if !P2_LINE_ARRAY
                 led1 = 0;
+
+                #endif
             }
         }
 
@@ -125,6 +193,24 @@ motor_M2.setVelocity(0.0f); // set a desired speed for speed controlled dc motor
         user_led = !user_led;
 
         // --- code that runs every cycle at the end goes here ---
+
+#if P2_LINE_ARRAY
+
+// print to the serial terminal
+printf("Averaged Bar Raw: |  %0.2f  | %0.2f |  %0.2f |  %0.2f |  %0.2f |  %0.2f |  %0.2f |  %0.2f | ", sensor_bar.getAvgBit(0)
+                                                                                                     , sensor_bar.getAvgBit(1)
+                                                                                                     , sensor_bar.getAvgBit(2)
+                                                                                                     , sensor_bar.getAvgBit(3)
+                                                                                                     , sensor_bar.getAvgBit(4)
+                                                                                                     , sensor_bar.getAvgBit(5)
+                                                                                                     , sensor_bar.getAvgBit(6)
+                                                                                                     , sensor_bar.getAvgBit(7));
+printf("Mean Left: %0.2f, Mean Center: %0.2f, Mean Right: %0.2f, Mean Outer: %0.2f \n", sensor_bar.getMeanThreeAvgBitsLeft()
+                                                                                      , sensor_bar.getMeanFourAvgBitsCenter()
+                                                                                      , sensor_bar.getMeanThreeAvgBitsRight()
+                                                                                      , sensor_bar.getMeanFourAvgBitsOuter());
+
+#endif 
 
         // read timer and make the main thread sleep for the remaining time span (non blocking)
         int main_task_elapsed_time_ms = duration_cast<milliseconds>(main_task_timer.elapsed_time()).count();
