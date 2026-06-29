@@ -1,5 +1,8 @@
 #define P1_KINEMATICS 0
 #define P2_LINE_ARRAY 1
+#define P2_SB_LIB 1
+#define P2_LF_LIB 0
+
 
 #include "mbed.h"
 
@@ -11,8 +14,17 @@
 
 #include "DCMotor.h"
 #include <Eigen/Dense>
+
+#if P2_SB_LIB //to use sound bar library, you need to set P2_SB_LIB to 1 in the defines above
+
 #include "SensorBar.h"
+#endif
+
+#if P2_LF_LIB //to use line follower library, you need to set P2_LF_LIB to 1 in the defines above
+
 #include "LineFollower.h"
+
+#endif
 
 #define M_PIf 3.14159265358979323846f // pi
 
@@ -67,7 +79,8 @@ DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_ma
 
 //#if P1_KINEMATICS
 // differential drive robot kinematics
-const float r_wheel = 0.0563f / 2.0f; // wheel radius in meters
+//const float r_wheel = 0.0563f / 2.0f; // wheel radius in meters(37mm diameter wheels, 56.3mm circumference)
+const float r_wheel = 0.037f / 2.0f; // wheel radius in meters(37mm diameter wheels, 56.3mm circumference)
 const float b_wheel = 0.156f;  // wheelbase, distance from wheel to wheel in meters
 
 // transforms wheel to robot velocities
@@ -79,25 +92,33 @@ Eigen::Vector2f wheel_speed = {0.0f, 0.0f};  // contains w1 and w2 (wheel speed)
 
 //#endif 
 
+
+
 #if P2_LINE_ARRAY
+
+#if P2_SB_LIB
 // sensor bar
-const float bar_dist = 0.114f; // distance from wheel axis to leds on sensor bar / array in meters
+const float bar_dist = 0.12f;//0.114f; // distance from wheel axis to leds on sensor bar / array in meters
 SensorBar sensor_bar(PB_9, PB_8, bar_dist);
+
+
 
 // angle measured from sensor bar (black line) relative to robot
 float angle{0.0f};
+
+#endif 
 
    // rotational velocity controller
 const float Kp{5.0f};
 const float wheel_vel_max = 2.0f * M_PIf * motor_M2.getMaxPhysicalVelocity();
 
-
-
 const float d_wheel = 0.0372f; // wheel diameter in meters
 
 
 // line follower, tune max. vel rps to your needs
-//LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, b_wheel, motor_M2.getMaxPhysicalVelocity());
+#if P2_LF_LIB
+LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, b_wheel, motor_M2.getMaxPhysicalVelocity());
+#endif
 
 
 #endif
@@ -115,7 +136,9 @@ const float d_wheel = 0.0372f; // wheel diameter in meters
         if (do_execute_main_task) {
 
             // --- code that runs when the blue button was pressed goes here ---
-#if P1_KINEMATICS
+enable_motors = 1;
+
+            #if P1_KINEMATICS
 
 // enable hardwaredriver dc motors: 0 -> disabled, 1 -> enabled
 enable_motors = 1;
@@ -136,23 +159,30 @@ motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PIf)); // set a desired speed fo
 
 #if P2_LINE_ARRAY
 
+#if P2_SB_LIB
 // only update sensor bar angle if an led is triggered
 if (sensor_bar.isAnyLedActive())
     angle = sensor_bar.getAvgAngleRad();
 
-
-// control algorithm for robot velocities
-Eigen::Vector2f robot_coord = {0.5f * wheel_vel_max * r_wheel,  // half of the max. forward velocity
+    // control algorithm for robot velocities
+//Eigen::Vector2f robot_coord
+robot_coord = {0.5f * wheel_vel_max * r_wheel,  // half of the max. forward velocity
                                Kp * angle                    }; // simple proportional angle controller
 
                                // map robot velocities to wheel velocities in rad/sec
-Eigen::Vector2f wheel_speed = Cwheel2robot.inverse() * robot_coord;
+//Eigen::Vector2f wheel_speed                              
+wheel_speed = Cwheel2robot.inverse() * robot_coord;
+
+
+#endif
+
+
  
 // setpoints for the dc motors in rps
 motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PIf)); // set a desired speed for speed controlled dc motors M1
 motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PIf)); // set a desired speed for speed controlled dc motors M2
 
-enable_motors = 1;
+
 
 // setpoints for the dc motors in rps
 //motor_M1.setVelocity(lineFollower.getRightWheelVelocity()); // set a desired speed for speed controlled dc motors M1
