@@ -5,6 +5,17 @@
 
 // drivers
 #include "DebounceIn.h"
+#include "IMU.h"
+
+#include "Servo.h"
+
+#define M_PIf 3.14159265358979323846f // pi
+
+#define IMU_THREAD_DO_USE_MAG_FOR_MAHONY_UPDATE true
+
+// IMU
+#define PB_IMU_SDA PC_9
+#define PB_IMU_SCL PA_8
 
 bool do_execute_main_task = false; // this variable will be toggled via the user button (blue button) and
                                    // decides whether to execute the main task or not
@@ -32,6 +43,10 @@ int main()
     // led on nucleo board
     DigitalOut user_led(LED1);
 
+    // imu
+    ImuData imu_data;
+    IMU imu(PB_IMU_SDA, PB_IMU_SCL);
+
     // additional led
     // create DigitalOut object to command extra led, you need to add an additional resistor, e.g. 220...500 Ohm
     // a led has an anode (+) and a cathode (-), the cathode needs to be connected to ground via the resistor
@@ -52,6 +67,7 @@ int main()
 
             // --- code that runs when the blue button was pressed goes here ---
 
+
             // visual feedback that the main task is executed, setting this once would actually be enough
             led1 = 1;
         } else {
@@ -70,6 +86,31 @@ int main()
         user_led = !user_led;
 
         // --- code that runs every cycle at the end goes here ---
+
+                    // read imu data
+imu_data = imu.getImuData();
+
+        // acceleration in meters per second squared in three axes
+float acc_x = imu_data.acc(0);
+float acc_y = imu_data.acc(1);
+float acc_z = imu_data.acc(2);
+
+//printf("acc_x: %f, acc_y: %f, acc_z: %f\n", acc_x, acc_y, acc_z);
+printf(">acc_x:%f\n>acc_y:%f\n>acc_z:%f\n", acc_x, acc_y, acc_z);
+
+
+// pitch, roll, yaw according to Tait-Bryan angles ZXY
+// where R = Rz(yaw) * Rx(roll) * Ry(pitch)
+// singularity at roll = +/-pi/2
+float pitch = imu_data.pry(0);
+float roll = imu_data.pry(1);
+float yaw = imu_data.pry(2);
+
+//printf("pitch: %f, roll: %f, yaw: %f\n", pitch, roll, yaw);
+printf(">pitch:%f\n>roll:%f\n>yaw:%f\n", pitch, roll, yaw);
+
+
+
 
         // read timer and make the main thread sleep for the remaining time span (non blocking)
         int main_task_elapsed_time_ms = duration_cast<milliseconds>(main_task_timer.elapsed_time()).count();
