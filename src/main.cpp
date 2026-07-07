@@ -43,9 +43,6 @@ int main()
     // led on nucleo board
     DigitalOut user_led(LED1);
 
-    // imu
-    ImuData imu_data;
-    IMU imu(PB_IMU_SDA, PB_IMU_SCL);
 
     // additional led
     // create DigitalOut object to command extra led, you need to add an additional resistor, e.g. 220...500 Ohm
@@ -53,6 +50,40 @@ int main()
     DigitalOut led1(PB_9);
 
     // --- adding variables and objects and applying functions starts here ---
+
+       // servo
+Servo servo_roll(PB_D0);
+Servo servo_pitch(PB_D1);
+
+// imu
+ImuData imu_data;
+IMU imu(PB_IMU_SDA, PB_IMU_SCL);
+Eigen::Vector2f rp(0.0f, 0.0f);
+
+    // minimal pulse width and maximal pulse width obtained from the servo calibration process
+// modelcraft RS2 MG/BB
+float servo_ang_min = 0.035f;
+float servo_ang_max = 0.130f;
+
+// servo.setPulseWidth: before calibration (0,1) -> (min pwm, max pwm)
+// servo.setPulseWidth: after calibration (0,1) -> (servo_D0_ang_min, servo_D0_ang_max)
+servo_roll.calibratePulseMinMax(servo_ang_min, servo_ang_max);
+servo_pitch.calibratePulseMinMax(servo_ang_min, servo_ang_max);
+
+// angle limits of the servos
+const float angle_range_min = -M_PIf / 2.0f;
+const float angle_range_max =  M_PIf / 2.0f;
+
+// angle to pulse width coefficients
+const float normalised_angle_gain = 1.0f / M_PIf;
+const float normalised_angle_offset = 0.5f;
+
+// pulse width
+static float roll_servo_width = 0.5f;
+static float pitch_servo_width = 0.5f;
+
+servo_roll.setPulseWidth(roll_servo_width);
+servo_pitch.setPulseWidth(pitch_servo_width);
 
     // start timer
     main_task_timer.start();
